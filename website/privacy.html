@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy - Illumine Lingao Reader</title>
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        body {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem;
+        }
+        h1 { margin-bottom: 0.5rem; }
+        .last-updated { color: var(--text-muted); margin-bottom: 2rem; }
+        h2 { margin-top: 2rem; margin-bottom: 1rem; font-size: 1.3rem; }
+        ul { margin-left: 1.5rem; }
+        li { margin-bottom: 0.5rem; }
+        .back-link { 
+            display: inline-block; 
+            margin-top: 2rem; 
+            padding: 0.75rem 1.5rem;
+            background: var(--accent-color);
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+        }
+        .back-link:hover { opacity: 0.9; }
+    </style>
+</head>
+<body data-theme="light">
+    <h1>Privacy Policy</h1>
+    <p class="last-updated">Last updated: February 2026</p>
+    
+    <h2>1. Data Collection</h2>
+    <p>This EPUB reader operates entirely in your web browser. We do not collect, store, or transmit any personal data to our servers. Your EPUB files are processed locally on your device and are never uploaded to any server.</p>
+    
+    <h2>2. Local Storage</h2>
+    <p>We use your browser's localStorage feature to save the following information on your device:</p>
+    <ul>
+        <li>Your reading progress (chapter and scroll position)</li>
+        <li>Your display preferences (theme, font size, font family, line height)</li>
+        <li>The name of the last EPUB file you opened (for convenience)</li>
+    </ul>
+    <p>This data remains on your device and is never transmitted to us or any third party.</p>
+    
+    <h2>3. Cookies and Advertising</h2>
+    <p>We use third-party advertising services (such as Google AdSense) to display advertisements. These services may use cookies and similar technologies to:</p>
+    <ul>
+        <li>Serve personalized advertisements based on your interests</li>
+        <li>Measure ad performance and viewability</li>
+        <li>Prevent fraudulent ad activity</li>
+    </ul>
+    <p>You can opt out of personalized advertising by visiting <a href="https://adssettings.google.com" target="_blank" rel="noopener">Google Ads Settings</a>.</p>
+    
+    <h2>4. Third-Party Services</h2>
+    <p>We may use the following third-party services:</p>
+    <ul>
+        <li><strong>Google AdSense</strong> - For displaying advertisements. See <a href="https://policies.google.com/technologies/ads" target="_blank" rel="noopener">Google's Privacy Policy</a>.</li>
+        <li><strong>Google Fonts</strong> - For loading web fonts. See <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google's Privacy Policy</a>.</li>
+    </ul>
+    
+    <h2>5. Your Rights</h2>
+    <p>You have the right to:</p>
+    <ul>
+        <li>Clear your localStorage data at any time through your browser settings</li>
+        <li>Use the reader without uploading any files</li>
+        <li>Opt out of personalized advertising</li>
+    </ul>
+    
+    <h2>6. Changes to This Policy</h2>
+    <p>We may update this privacy policy from time to time. Any changes will be posted on this page.</p>
+    
+    <h2>7. Contact</h2>
+    <p>If you have any questions about this privacy policy, please contact us.</p>
+    
+    <a href="index.html" class="back-link">← Back to Reader</a>
+    
+    <script>
+        // Load saved theme
+        const settings = localStorage.getItem('epub-reader-settings');
+        if (settings) {
+            const { theme } = JSON.parse(settings);
+            document.body.setAttribute('data-theme', theme || 'light');
+        }
+    </script>
+</body>
+</html>

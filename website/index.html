@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Illumine Lingao - Online Reader</title>
+    <meta name="description" content="Read Illumine Lingao online - A Chinese alternate history web novel about 500 modern people who travel back to 1628 Ming Dynasty China.">
+
+    <!-- ADSENSE_PLACEHOLDER -->
+
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="loading-screen">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <h2>Loading Illumine Lingao</h2>
+            <p id="loading-status">Initializing reader...</p>
+            <div class="progress-bar">
+                <div id="loading-progress" class="progress-fill"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Reader Interface -->
+    <div id="reader-interface" class="reader-interface hidden">
+        <!-- Top Navigation Bar -->
+        <header class="top-bar">
+            <button id="menu-toggle" class="icon-btn" aria-label="Toggle menu">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+
+            <div class="book-title">
+                <span id="current-chapter-title">Loading...</span>
+            </div>
+
+            <div class="top-actions">
+                <!-- Search Button -->
+                <button id="search-toggle" class="icon-btn" aria-label="Search">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                </button>
+
+                <button id="toc-toggle" class="icon-btn" aria-label="Table of contents">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="8" y1="6" x2="21" y2="6"></line>
+                        <line x1="8" y1="12" x2="21" y2="12"></line>
+                        <line x1="8" y1="18" x2="21" y2="18"></line>
+                        <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                        <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                        <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                    </svg>
+                </button>
+
+                <!-- Theme Toggle -->
+                <button id="theme-toggle" class="icon-btn" aria-label="Toggle dark mode">
+                    <svg id="theme-icon-light" class="hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                    <svg id="theme-icon-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                </button>
+
+                <button id="settings-toggle" class="icon-btn" aria-label="Reading settings">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M12 1v6m0 6v6m4.22-10.22l4.24-4.24M6.34 17.66l-4.24 4.24M23 12h-6m-6 0H1m20.24 4.24l-4.24-4.24M6.34 6.34L2.1 2.1"></path>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <div class="reader-layout">
+            <!-- Sidebar (Table of Contents) -->
+            <aside id="sidebar" class="sidebar">
+                <div class="sidebar-header">
+                    <h3>Contents</h3>
+                    <button id="sidebar-close" class="icon-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Book Info -->
+                <div class="book-info">
+                    <div class="book-cover-small">临高启明</div>
+                    <h4>Illumine Lingao</h4>
+                    <p>by Blowing Past the Ear</p>
+                </div>
+
+                <!-- Progress Info -->
+                <div class="progress-info">
+                    <span id="progress-text">Chapter 0 of 852</span>
+                    <span id="percent-text">0%</span>
+                </div>
+
+                <!-- TOC Container -->
+                <div class="toc-container" id="toc-list">
+                    <!-- TOC items populated by JS -->
+                </div>
+            </aside>
+
+            <!-- Main Content Area -->
+            <main class="content-area">
+                <!-- Progress Bar -->
+                <div class="reading-progress">
+                    <div id="progress-bar" class="progress-indicator"></div>
+                </div>
+
+                <!-- Reading Container -->
+                <div class="reading-container">
+                    <!-- Chapter Content -->
+                    <article id="chapter-content" class="chapter-content">
+                        <!-- Chapter content loaded here -->
+                    </article>
+
+                    <!-- Chapter Navigation at bottom -->
+                    <div class="chapter-end-nav">
+                        <button id="continue-reading" class="btn-primary hidden">Continue Reading</button>
+                    </div>
+                </div>
+
+                <!-- Navigation Footer -->
+                <nav class="chapter-nav">
+                    <button id="prev-chapter" class="nav-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="15 18 9 12 15 6"></polyline>
+                        </svg>
+                        <span>Previous</span>
+                    </button>
+
+                    <div class="nav-info">
+                        <span id="chapter-number">- / -</span>
+                    </div>
+
+                    <button id="next-chapter" class="nav-btn">
+                        <span>Next</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="9 18 15 12 9 6"></polyline>
+                        </svg>
+                    </button>
+                </nav>
+            </main>
+        </div>
+
+        <!-- Search Panel -->
+        <div id="search-panel" class="search-panel hidden">
+            <div class="search-header">
+                <h3>Search</h3>
+                <button id="search-close" class="icon-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="search-input-container">
+                <input type="text" id="search-input" placeholder="Search in chapters...">
+                <button id="search-btn" class="btn-primary">Search</button>
+            </div>
+
+            <div id="search-status" class="search-status"></div>
+
+            <div id="search-results" class="search-results">
+                <!-- Search results populated here -->
+            </div>
+        </div>
+
+        <!-- Settings Panel -->
+        <div id="settings-panel" class="settings-panel hidden">
+            <div class="settings-header">
+                <h3>Reading Settings</h3>
+                <button id="settings-close" class="icon-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="settings-section">
+                <label>Theme</label>
+                <div class="theme-options">
+                    <button class="theme-btn" data-theme="light">
+                        <span class="theme-preview light"></span>
+                        Light
+                    </button>
+                    <button class="theme-btn" data-theme="sepia">
+                        <span class="theme-preview sepia"></span>
+                        Sepia
+                    </button>
+                    <button class="theme-btn active" data-theme="dark">
+                        <span class="theme-preview dark"></span>
+                        Dark
+                    </button>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <label>Font Size</label>
+                <div class="font-size-control">
+                    <button id="font-decrease" class="size-btn">A-</button>
+                    <span id="font-size-value">18px</span>
+                    <button id="font-increase" class="size-btn">A+</button>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <label>Font Family</label>
+                <select id="font-family">
+                    <option value="Crimson Text">Crimson (Serif)</option>
+                    <option value="Inter">Inter (Sans-serif)</option>
+                    <option value="Georgia">Georgia</option>
+                    <option value="system-ui">System Default</option>
+                </select>
+            </div>
+
+            <div class="settings-section">
+                <label>Line Height</label>
+                <input type="range" id="line-height" min="1.2" max="2.0" step="0.1" value="1.6">
+                <span id="line-height-value">1.6</span>
+            </div>
+
+            <div class="settings-section">
+                <label>Reading Progress</label>
+                <button id="reset-progress" class="btn-small" style="width: 100%;">Reset Progress</button>
+            </div>
+        </div>
+
+        <!-- Overlay for mobile -->
+        <div id="overlay" class="overlay hidden"></div>
+
+        <!-- Footer Links -->
+        <footer style="text-align: center; padding: 1rem; color: var(--text-muted); font-size: 0.85rem; border-top: 1px solid var(--border-color);">
+            <p>Illumine Lingao Reader • <a href="privacy.html" style="color: var(--accent-color);">Privacy Policy</a></p>
+            <p style="margin-top: 0.5rem; font-size: 0.75rem;">852 chapters • Fan-made reader</p>
+        </footer>
+    </div>
+
+    <!-- Content Scripts - Loaded dynamically by reader.js -->
+    <script src="js/reader.js"></script>
+</body>
+</html>

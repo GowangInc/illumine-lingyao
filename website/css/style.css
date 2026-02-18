@@ -1,0 +1,1338 @@
+/* ========================================
+   Illumine Lingao Reader Styles
+   Supports EPUB and PDF with Dark Mode
+   ======================================== */
+
+/* CSS Variables for Theming */
+:root {
+    --bg-color: #fafafa;
+    --content-bg: #ffffff;
+    --text-color: #2c3e50;
+    --text-muted: #6c757d;
+    --accent-color: #8b4513;
+    --border-color: #e9ecef;
+    --sidebar-bg: #f8f9fa;
+    --hover-bg: #e9ecef;
+    --shadow: 0 2px 8px rgba(0,0,0,0.08);
+    --shadow-lg: 0 4px 20px rgba(0,0,0,0.12);
+    --font-serif: 'Crimson Text', Georgia, serif;
+    --font-sans: 'Inter', system-ui, sans-serif;
+    --content-width: 720px;
+    --sidebar-width: 320px;
+    --pdf-bg: #525659;
+}
+
+/* Sepia Theme */
+[data-theme="sepia"] {
+    --bg-color: #f4ecd8;
+    --content-bg: #fdf6e3;
+    --text-color: #5b4636;
+    --text-muted: #8b7355;
+    --accent-color: #8b4513;
+    --border-color: #e8dec5;
+    --sidebar-bg: #f0e6d2;
+    --hover-bg: #e8dec5;
+    --pdf-bg: #d4c5a9;
+}
+
+/* Dark Theme */
+[data-theme="dark"] {
+    --bg-color: #1a1a2e;
+    --content-bg: #16213e;
+    --text-color: #e8e8e8;
+    --text-muted: #a0a0a0;
+    --accent-color: #e94560;
+    --border-color: #2d3748;
+    --sidebar-bg: #1f2937;
+    --hover-bg: #374151;
+    --pdf-bg: #1a1a1a;
+}
+
+/* PDF Dark Mode - Invert colors */
+[data-theme="dark"] .pdf-page {
+    filter: invert(1) hue-rotate(180deg);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+
+[data-theme="dark"] .pdf-page canvas {
+    filter: invert(1) hue-rotate(180deg);
+}
+
+/* ========================================
+   Base & Reset
+   ======================================== */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+    font-family: var(--font-sans);
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    line-height: 1.6;
+    min-height: 100vh;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* ========================================
+   Loading Screen
+   ======================================== */
+
+.loading-screen {
+    position: fixed;
+    inset: 0;
+    background: var(--bg-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.loading-content {
+    text-align: center;
+    padding: 2rem;
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid var(--border-color);
+    border-top-color: var(--accent-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 1.5rem;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.loading-content h2 {
+    font-family: var(--font-serif);
+    font-size: 1.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.loading-content p {
+    color: var(--text-muted);
+    margin-bottom: 1.5rem;
+}
+
+.progress-bar {
+    width: 300px;
+    height: 4px;
+    background: var(--border-color);
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 0 auto;
+}
+
+.progress-fill {
+    height: 100%;
+    background: var(--accent-color);
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+/* ========================================
+   Upload Screen
+   ======================================== */
+
+.upload-screen {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+}
+
+.upload-container {
+    max-width: 500px;
+    text-align: center;
+}
+
+.book-cover {
+    margin-bottom: 1.5rem;
+}
+
+.cover-art {
+    width: 150px;
+    height: 220px;
+    background: linear-gradient(135deg, #8b4513 0%, #654321 100%);
+    border-radius: 8px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-family: serif;
+    font-size: 2rem;
+    writing-mode: vertical-rl;
+    text-orientation: upright;
+    box-shadow: var(--shadow-lg);
+}
+
+.upload-container h1 {
+    font-family: var(--font-serif);
+    font-size: 2rem;
+    margin-bottom: 0.25rem;
+}
+
+.subtitle {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}
+
+.description {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    margin-bottom: 2rem;
+    padding: 0 1rem;
+}
+
+.upload-area {
+    border: 2px dashed var(--border-color);
+    border-radius: 12px;
+    padding: 2.5rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: var(--content-bg);
+}
+
+.upload-area:hover {
+    border-color: var(--accent-color);
+    background: var(--hover-bg);
+}
+
+.upload-area.drag-over {
+    border-color: var(--accent-color);
+    background: var(--hover-bg);
+    transform: scale(1.02);
+}
+
+.upload-icon {
+    width: 48px;
+    height: 48px;
+    color: var(--accent-color);
+    margin-bottom: 1rem;
+}
+
+.upload-area p {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+}
+
+.upload-note {
+    margin-top: 1.5rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.upload-note code {
+    background: var(--sidebar-bg);
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+}
+
+.upload-note small {
+    display: block;
+    margin-top: 0.5rem;
+    opacity: 0.7;
+}
+
+/* ========================================
+   Advertisement Containers
+   ======================================== */
+
+.ad-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: var(--sidebar-bg);
+    min-height: 90px;
+}
+
+.ad-container ins.adsbygoogle {
+    display: block;
+    width: 100%;
+    text-align: center;
+}
+
+.ad-placeholder {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    opacity: 0.6;
+}
+
+.ad-placeholder span {
+    display: block;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.25rem;
+}
+
+/* Header Ad */
+.ad-header {
+    min-height: 90px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-color);
+}
+
+.ad-header ins.adsbygoogle {
+    min-height: 90px;
+}
+
+/* Sidebar Ad */
+.ad-sidebar {
+    margin: 1rem;
+    padding: 1rem 0;
+    border-top: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+    min-height: 250px;
+}
+
+.ad-sidebar ins.adsbygoogle {
+    min-height: 250px;
+}
+
+/* Mid-content Ad */
+.ad-mid-content {
+    margin: 3rem auto;
+    max-width: var(--content-width);
+    border-radius: 8px;
+}
+
+/* Footer Ad */
+.ad-footer {
+    border-top: 1px solid var(--border-color);
+    padding: 1.5rem;
+    min-height: 90px;
+}
+
+/* Hide sidebar ad on mobile */
+@media (max-width: 1024px) {
+    .ad-sidebar {
+        display: none;
+    }
+}
+
+/* Responsive header ad */
+@media (max-width: 768px) {
+    .ad-header {
+        min-height: 50px;
+        padding: 0.5rem;
+    }
+
+    .ad-header ins.adsbygoogle {
+        min-height: 50px;
+    }
+}
+
+/* ========================================
+   Reader Interface
+   ======================================== */
+
+.reader-interface {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* Top Bar */
+.top-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: var(--content-bg);
+    border-bottom: 1px solid var(--border-color);
+    box-shadow: var(--shadow);
+}
+
+.icon-btn {
+    width: 40px;
+    height: 40px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+    cursor: pointer;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s ease;
+}
+
+.icon-btn:hover {
+    background: var(--hover-bg);
+}
+
+.icon-btn svg {
+    width: 22px;
+    height: 22px;
+}
+
+.book-title {
+    flex: 1;
+    text-align: center;
+    padding: 0 1rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.top-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+/* Reader Layout */
+.reader-layout {
+    display: flex;
+    flex: 1;
+}
+
+/* ========================================
+   Sidebar (Table of Contents)
+   ======================================== */
+
+.sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: var(--sidebar-width);
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--border-color);
+    z-index: 200;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar.open {
+    transform: translateX(0);
+}
+
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.sidebar-header h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+/* PDF Navigation */
+.pdf-navigation {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.pdf-navigation label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+
+.page-input-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.page-input-group input {
+    width: 60px;
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--content-bg);
+    color: var(--text-color);
+    text-align: center;
+}
+
+.btn-small {
+    padding: 0.5rem 1rem;
+    background: var(--accent-color);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.btn-small:hover {
+    opacity: 0.9;
+}
+
+.thumbnail-container {
+    flex: 1;
+    overflow-y: auto;
+    margin-top: 1rem;
+    max-height: 400px;
+}
+
+.thumbnail {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.2s ease;
+}
+
+.thumbnail:hover {
+    background: var(--hover-bg);
+}
+
+.thumbnail.active {
+    background: var(--hover-bg);
+    border-left: 3px solid var(--accent-color);
+}
+
+.thumbnail img {
+    width: 60px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 2px;
+    border: 1px solid var(--border-color);
+    background: white;
+}
+
+.thumbnail span {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+/* TOC Container */
+.toc-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.5rem 0;
+}
+
+/* Book Info in Sidebar */
+.book-info {
+    padding: 1rem;
+    text-align: center;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.book-cover-small {
+    width: 80px;
+    height: 120px;
+    background: linear-gradient(135deg, #8b4513 0%, #654321 100%);
+    border-radius: 6px;
+    margin: 0 auto 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-family: serif;
+    font-size: 1.25rem;
+    writing-mode: vertical-rl;
+    text-orientation: upright;
+    box-shadow: var(--shadow);
+}
+
+.book-info h4 {
+    font-size: 0.95rem;
+    margin-bottom: 0.25rem;
+    font-family: var(--font-serif);
+}
+
+.book-info p {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+/* Progress Info */
+.progress-info {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-color);
+    background: var(--sidebar-bg);
+}
+
+/* Continue Reading Button */
+.chapter-end-nav {
+    text-align: center;
+    padding: 3rem 0;
+}
+
+#continue-reading {
+    padding: 1rem 2rem;
+    font-size: 1rem;
+}
+
+.toc-item {
+    display: block;
+    padding: 0.75rem 1rem;
+    color: var(--text-color);
+    text-decoration: none;
+    font-size: 0.9rem;
+    border-left: 3px solid transparent;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.toc-item:hover {
+    background: var(--hover-bg);
+}
+
+.toc-item.active {
+    background: var(--hover-bg);
+    border-left-color: var(--accent-color);
+    font-weight: 500;
+}
+
+.toc-item .chapter-number {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-bottom: 0.1rem;
+}
+
+/* Desktop sidebar */
+@media (min-width: 1025px) {
+    .sidebar {
+        position: sticky;
+        transform: none;
+        height: calc(100vh - 61px);
+    }
+    
+    #menu-toggle {
+        display: none;
+    }
+    
+    #sidebar-close {
+        display: none;
+    }
+}
+
+/* ========================================
+   Content Area
+   ======================================== */
+
+.content-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+/* Reading Progress Bar */
+.reading-progress {
+    position: sticky;
+    top: 61px;
+    z-index: 50;
+    height: 3px;
+    background: var(--border-color);
+}
+
+.progress-indicator {
+    height: 100%;
+    background: var(--accent-color);
+    width: 0%;
+    transition: width 0.1s linear;
+}
+
+/* Reading Container */
+.reading-container {
+    flex: 1;
+    max-width: var(--content-width);
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+    width: 100%;
+}
+
+@media (min-width: 768px) {
+    .reading-container {
+        padding: 3rem 2rem;
+    }
+}
+
+/* ========================================
+   PDF Viewer
+   ======================================== */
+
+.pdf-viewer {
+    background: var(--pdf-bg);
+    min-height: 100%;
+    padding: 2rem 1rem;
+}
+
+.pdf-pages-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2rem;
+}
+
+.pdf-page {
+    background: white;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    border-radius: 4px;
+    overflow: hidden;
+    max-width: 100%;
+}
+
+.pdf-page canvas {
+    display: block;
+    max-width: 100%;
+    height: auto;
+}
+
+.pdf-page-number {
+    text-align: center;
+    padding: 0.5rem;
+    background: rgba(0,0,0,0.05);
+    font-size: 0.8rem;
+    color: #666;
+}
+
+/* PDF Text Layer for Search */
+.pdf-text-layer {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    overflow: hidden;
+    line-height: 1;
+}
+
+.pdf-text-layer > span {
+    position: absolute;
+    color: transparent;
+    cursor: text;
+    transform-origin: 0% 0%;
+}
+
+.pdf-text-layer .highlight {
+    background-color: rgba(255, 255, 0, 0.4);
+    border-radius: 2px;
+}
+
+.pdf-text-layer .highlight-current {
+    background-color: rgba(255, 165, 0, 0.6);
+}
+
+/* ========================================
+   EPUB Chapter Content
+   ======================================== */
+
+.chapter-content {
+    font-family: var(--font-serif);
+    font-size: 18px;
+    line-height: 1.6;
+}
+
+.chapter-content h1,
+.chapter-content h2,
+.chapter-content h3 {
+    font-family: var(--font-serif);
+    margin: 2rem 0 1rem;
+    line-height: 1.3;
+}
+
+.chapter-content h1 {
+    font-size: 1.8em;
+    text-align: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.chapter-content h2 {
+    font-size: 1.4em;
+    margin-top: 2.5rem;
+}
+
+.chapter-content p {
+    margin-bottom: 1.25em;
+    text-align: justify;
+    hyphens: auto;
+}
+
+.chapter-content p:first-of-type::first-letter {
+    font-size: 3em;
+    float: left;
+    line-height: 0.8;
+    padding-right: 0.1em;
+    font-weight: 600;
+    color: var(--accent-color);
+}
+
+.chapter-content img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 2rem auto;
+    border-radius: 4px;
+}
+
+.chapter-content blockquote {
+    margin: 2rem 0;
+    padding: 1rem 1.5rem;
+    border-left: 4px solid var(--accent-color);
+    background: var(--sidebar-bg);
+    font-style: italic;
+}
+
+.chapter-content blockquote p {
+    margin: 0;
+}
+
+.chapter-separator {
+    text-align: center;
+    margin: 3rem 0;
+    color: var(--text-muted);
+    font-size: 1.5rem;
+    letter-spacing: 0.5em;
+}
+
+/* ========================================
+   Search Panel
+   ======================================== */
+
+.search-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(100%, 400px);
+    background: var(--content-bg);
+    box-shadow: var(--shadow-lg);
+    z-index: 300;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+    display: flex;
+    flex-direction: column;
+}
+
+.search-panel.open {
+    transform: translateX(0);
+}
+
+.search-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.search-header h3 {
+    font-size: 1.1rem;
+}
+
+.search-input-container {
+    padding: 1rem;
+    display: flex;
+    gap: 0.5rem;
+}
+
+.search-input-container input {
+    flex: 1;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--content-bg);
+    color: var(--text-color);
+    font-size: 0.95rem;
+}
+
+.btn-primary {
+    padding: 0.75rem 1.25rem;
+    background: var(--accent-color);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.btn-primary:hover {
+    opacity: 0.9;
+}
+
+.search-options {
+    padding: 0 1rem 1rem;
+    display: flex;
+    gap: 1rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.search-options label {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    cursor: pointer;
+}
+
+.search-status {
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.search-results {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.5rem 0;
+}
+
+.search-result {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.search-result:hover {
+    background: var(--hover-bg);
+}
+
+.search-result.active {
+    background: var(--hover-bg);
+    border-left: 3px solid var(--accent-color);
+}
+
+.search-result .result-page {
+    font-size: 0.75rem;
+    color: var(--accent-color);
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.search-result .result-text {
+    font-size: 0.9rem;
+    color: var(--text-color);
+    line-height: 1.4;
+}
+
+.search-result .result-text mark {
+    background: rgba(255, 255, 0, 0.4);
+    color: inherit;
+    font-weight: 600;
+}
+
+/* ========================================
+   Chapter Navigation
+   ======================================== */
+
+.chapter-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.5rem;
+    border-top: 1px solid var(--border-color);
+    background: var(--content-bg);
+    gap: 1rem;
+}
+
+.nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.25rem;
+    border: 1px solid var(--border-color);
+    background: var(--content-bg);
+    color: var(--text-color);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.nav-btn:hover:not(:disabled) {
+    background: var(--hover-bg);
+    border-color: var(--accent-color);
+}
+
+.nav-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.nav-btn svg {
+    width: 18px;
+    height: 18px;
+}
+
+.nav-info {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+@media (max-width: 480px) {
+    .nav-btn span {
+        display: none;
+    }
+    
+    .nav-btn {
+        padding: 0.75rem;
+    }
+}
+
+/* ========================================
+   Settings Panel
+   ======================================== */
+
+.settings-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(100%, 360px);
+    background: var(--content-bg);
+    box-shadow: var(--shadow-lg);
+    z-index: 300;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+    overflow-y: auto;
+}
+
+.settings-panel.open {
+    transform: translateX(0);
+}
+
+.settings-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    position: sticky;
+    top: 0;
+    background: var(--content-bg);
+    z-index: 10;
+}
+
+.settings-header h3 {
+    font-size: 1.1rem;
+}
+
+.settings-section {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.settings-section label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+}
+
+/* Theme Options */
+.theme-options {
+    display: flex;
+    gap: 1rem;
+}
+
+.theme-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    border: 2px solid var(--border-color);
+    background: var(--content-bg);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s ease;
+}
+
+.theme-btn:hover {
+    border-color: var(--accent-color);
+}
+
+.theme-btn.active {
+    border-color: var(--accent-color);
+    background: var(--hover-bg);
+}
+
+.theme-preview {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid var(--border-color);
+}
+
+.theme-preview.light {
+    background: #ffffff;
+}
+
+.theme-preview.sepia {
+    background: #fdf6e3;
+}
+
+.theme-preview.dark {
+    background: #16213e;
+    border-color: #e94560;
+}
+
+/* Font Size Control */
+.font-size-control {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+}
+
+.size-btn {
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--border-color);
+    background: var(--content-bg);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.size-btn:hover {
+    background: var(--hover-bg);
+    border-color: var(--accent-color);
+}
+
+#font-size-value {
+    font-size: 0.9rem;
+    font-weight: 500;
+    min-width: 50px;
+    text-align: center;
+}
+
+/* Zoom Control */
+.zoom-control {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+}
+
+#zoom-value {
+    font-size: 0.9rem;
+    font-weight: 500;
+    min-width: 50px;
+    text-align: center;
+}
+
+/* Select & Range Inputs */
+.settings-section select {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--content-bg);
+    color: var(--text-color);
+    font-size: 0.95rem;
+    cursor: pointer;
+}
+
+.settings-section input[type="range"] {
+    width: 100%;
+    margin-bottom: 0.5rem;
+}
+
+#line-height-value {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+/* Overlay */
+.overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 150;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+}
+
+.overlay.show {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* ========================================
+   Responsive Adjustments
+   ======================================== */
+
+@media (max-width: 768px) {
+    :root {
+        --content-width: 100%;
+    }
+    
+    .reading-container {
+        padding: 1.5rem 1rem;
+    }
+    
+    .chapter-content {
+        font-size: 17px;
+        line-height: 1.7;
+    }
+    
+    .chapter-content h1 {
+        font-size: 1.5em;
+    }
+    
+    .ad-mid-content {
+        margin: 2rem 0;
+    }
+    
+    .pdf-viewer {
+        padding: 1rem 0.5rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .chapter-content {
+        font-size: 16px;
+    }
+    
+    .chapter-content p:first-of-type::first-letter {
+        font-size: 2.5em;
+    }
+    
+    .settings-panel,
+    .search-panel {
+        width: 100%;
+    }
+    
+    .search-input-container {
+        flex-direction: column;
+    }
+}
+
+/* ========================================
+   Print Styles
+   ======================================== */
+
+@media print {
+    .top-bar,
+    .sidebar,
+    .chapter-nav,
+    .settings-panel,
+    .search-panel,
+    .ad-container,
+    .reading-progress {
+        display: none !important;
+    }
+    
+    .content-area {
+        margin: 0;
+    }
+    
+    .reading-container {
+        max-width: none;
+        padding: 0;
+    }
+    
+    .chapter-content {
+        font-size: 12pt;
+        line-height: 1.5;
+    }
+    
+    .pdf-page {
+        filter: none !important;
+        box-shadow: none;
+        page-break-after: always;
+    }
+}
+
+/* ========================================
+   Scrollbar Styles
+   ======================================== */
+
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--sidebar-bg);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+}
+
+/* Firefox */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color) var(--sidebar-bg);
+}
+
+/* ========================================
+   Loading States
+   ======================================== */
+
+.pdf-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    color: var(--text-muted);
+}
+
+.pdf-loading .spinner {
+    width: 30px;
+    height: 30px;
+    margin-right: 1rem;
+    border-width: 3px;
+}
