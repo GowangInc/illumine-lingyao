@@ -18,10 +18,16 @@ import sys
 import time
 import subprocess
 import tempfile
-import re
+import threading
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 from dataclasses import dataclass
+
+from rich.console import Console
+from rich.live import Live
+from rich.panel import Panel
+from rich.text import Text
+from rich import box
 
 # Configuration
 PLAN_DIR = Path("plan")
@@ -42,6 +48,8 @@ VIDEO_CRF = 23
 AUDIO_CODEC = "aac"
 AUDIO_BITRATE = "64k"  # Speech-only audiobook, 64kbps is excellent
 AUDIO_SAMPLE_RATE = 24000  # Match source audio (24kHz is standard for speech)
+
+console = Console()
 
 # YouTube playlist URL
 PLAYLIST_URL = "https://www.youtube.com/playlist?list=PLjq2oIRxOOOmKJ54-0L-JCr46zLuNXmFK"
@@ -263,15 +271,16 @@ def check_clip_validity(clip_path: Path) -> bool:
         return False
 
 
-def run_ffmpeg_with_progress(cmd: List[str], total_duration: float, timeout: int = 7200) -> Tuple[bool, str]:
+def run_ffmpeg_with_progress(cmd: List[str], total_duration: float, state: dict, timeout: int = 7200) -> Tuple[bool, str]:
     """
-    Run FFmpeg command and display progress bar based on encoded time.
+    Run FFmpeg command and update state dict with progress for Rich display.
 
     Uses -progress pipe:1 for reliable line-buffered progress on all platforms.
 
     Args:
         cmd: FFmpeg command as list of strings
         total_duration: Total expected duration in seconds
+        state: Shared dict to update with progress (percent, current_time, eta_str)
         timeout: Maximum execution time in seconds
 
     Returns:
@@ -288,14 +297,16 @@ def run_ffmpeg_with_progress(cmd: List[str], total_duration: float, timeout: int
             universal_newlines=True,
         )
 
-        start_time = time.time()
-        last_update = 0
+        ffmpeg_start = time.time()
 
-        for line in process.stdout:
-            # Check timeout
-            if time.time() - start_time > timeout:
+        while True:
+            if time.time() - ffmpeg_start > timeout:
                 process.kill()
                 return False, "FFmpeg timeout"
+
+            line = process.stdout.readline()
+            if not line:
+                break
 
             line = line.strip()
             if line.startswith("out_time_ms="):
@@ -308,36 +319,23 @@ def run_ffmpeg_with_progress(cmd: List[str], total_duration: float, timeout: int
                 if current_time < 0 or total_duration <= 0:
                     continue
 
-                now = time.time()
-                if now - last_update >= 1.0:
-                    percent = min(100, (current_time / total_duration) * 100)
-                    elapsed = now - start_time
+                elapsed = time.time() - ffmpeg_start
+                percent = min(100, (current_time / total_duration) * 100)
 
-                    current_h = int(current_time // 3600)
-                    current_m = int((current_time % 3600) // 60)
-                    current_s = int(current_time % 60)
+                if current_time > 0:
+                    eta_seconds = (total_duration - current_time) * (elapsed / current_time)
+                    eta_m = int(eta_seconds // 60)
+                    eta_s = int(eta_seconds % 60)
+                    eta_str = f"{eta_m}m{eta_s:02d}s"
+                else:
+                    eta_str = "—"
 
-                    total_h = int(total_duration // 3600)
-                    total_m = int((total_duration % 3600) // 60)
-                    total_s = int(total_duration % 60)
-
-                    if current_time > 0:
-                        eta_seconds = (total_duration - current_time) * (elapsed / current_time)
-                        eta_m = int(eta_seconds // 60)
-                        eta_s = int(eta_seconds % 60)
-                        eta_str = f"{eta_m}m{eta_s}s"
-                    else:
-                        eta_str = "?"
-
-                    bar_width = 30
-                    filled = int(bar_width * percent / 100)
-                    bar = '█' * filled + '░' * (bar_width - filled)
-
-                    print(f"\r    [{bar}] {percent:.1f}% | {current_h:02d}:{current_m:02d}:{current_s:02d} / {total_h:02d}:{total_m:02d}:{total_s:02d} | ETA: {eta_str}   ", end='', flush=True)
-                    last_update = now
+                state["percent"] = percent
+                state["current_time"] = current_time
+                state["total_duration"] = total_duration
+                state["eta"] = eta_str
 
         return_code = process.wait()
-        print()  # New line after progress bar
 
         if return_code != 0:
             stderr_text = process.stderr.read()
@@ -349,12 +347,15 @@ def run_ffmpeg_with_progress(cmd: List[str], total_duration: float, timeout: int
         return False, f"FFmpeg exception: {e}"
 
 
-def build_segment_video(segment: Segment, output_path: Path) -> bool:
+def build_segment_video(segment: Segment, output_path: Path, state: dict) -> Tuple[bool, str]:
     """
     Build a single segment video by concatenating clips and audio.
 
     Uses FFmpeg concat demuxer for clips and audio separately,
-    then muxes together.
+    then muxes together. Updates state dict for Rich display.
+
+    Returns:
+        Tuple of (success, error_message)
     """
     # Collect all clips and audio files in order
     all_clips = []
@@ -363,39 +364,36 @@ def build_segment_video(segment: Segment, output_path: Path) -> bool:
     for ch in segment.chapters:
         clips = get_chapter_clips(ch)
         if not clips:
-            print(f"    WARNING: No clips for chapter {ch.index}, skipping")
             continue
 
         # Validate clips before adding
         for clip in clips:
             if not check_clip_validity(clip):
-                print(f"    ERROR: Corrupt clip found: {clip}")
-                # We stop immediately to avoid building a broken video
-                return False
-        
+                return False, f"Corrupt clip: {clip}"
+
         all_clips.extend(clips)
 
         audio_path = CHAPTERS_AUDIO_DIR / ch.audio_file
         if audio_path.exists():
             all_audio_files.append((audio_path, ch.audio_duration))
-        else:
-            print(f"    WARNING: Audio not found: {audio_path}")
 
     if not all_clips:
-        print(f"    ERROR: No clips found for segment")
-        return False
+        return False, "No clips found for segment"
 
     if not all_audio_files:
-        print(f"    ERROR: No audio found for segment")
-        return False
+        return False, "No audio found for segment"
+
+    state["clip_count"] = len(all_clips)
+    state["audio_count"] = len(all_audio_files)
 
     # Create temp files for concat lists
+    clips_list_path = None
+    audio_list_path = None
     try:
         with tempfile.NamedTemporaryFile(
             mode='w', suffix='.txt', delete=False, prefix='clips_'
         ) as clips_list:
             for clip in all_clips:
-                # Convert to absolute path with forward slashes for FFmpeg
                 abs_path = str(clip.resolve()).replace(chr(92), '/')
                 clips_list.write(f"file '{abs_path}'\n")
             clips_list_path = clips_list.name
@@ -404,54 +402,43 @@ def build_segment_video(segment: Segment, output_path: Path) -> bool:
             mode='w', suffix='.txt', delete=False, prefix='audio_'
         ) as audio_list:
             for audio_path, _ in all_audio_files:
-                # Convert to absolute path with forward slashes for FFmpeg
                 abs_path = str(audio_path.resolve()).replace(chr(92), '/')
                 audio_list.write(f"file '{abs_path}'\n")
             audio_list_path = audio_list.name
 
-        # Build FFmpeg command
-        # Use stream copy for video (clips already H.264), re-encode audio only
-        # Explicit mapping ensures we get video from input 0 and audio from input 1
         cmd = [
             "ffmpeg", "-y",
             "-f", "concat", "-safe", "0", "-i", clips_list_path,
             "-f", "concat", "-safe", "0", "-i", audio_list_path,
             "-map", "0:v", "-map", "1:a",
-            "-c:v", "copy",  # Stream copy - no re-encode (clips already H.264)
+            "-c:v", "copy",
             "-c:a", AUDIO_CODEC, "-b:a", AUDIO_BITRATE,
-            "-ar", str(AUDIO_SAMPLE_RATE), "-ac", "1",  # Mono (source is mono TTS)
+            "-ar", str(AUDIO_SAMPLE_RATE), "-ac", "1",
             "-movflags", "+faststart",
             "-shortest",
             str(output_path)
         ]
 
-        print(f"    Running FFmpeg ({len(all_clips)} clips, {len(all_audio_files)} audio files)...")
-        # print(f"    Command: {' '.join(cmd)}")  # Debugging
-
-        success, error_msg = run_ffmpeg_with_progress(cmd, segment.total_duration, timeout=7200)
+        success, error_msg = run_ffmpeg_with_progress(cmd, segment.total_duration, state, timeout=7200)
 
         if not success:
-            print(f"    {error_msg}")
-            return False
+            return False, error_msg
 
-        return output_path.exists()
+        if output_path.exists():
+            return True, ""
+        return False, "Output file not created"
 
     except subprocess.TimeoutExpired:
-        print(f"    FFmpeg timeout for segment")
-        return False
+        return False, "FFmpeg timeout"
     except Exception as e:
-        print(f"    FFmpeg error: {e}")
-        return False
+        return False, f"FFmpeg error: {e}"
     finally:
-        # Clean up temp files
-        try:
-            os.unlink(clips_list_path)
-        except:
-            pass
-        try:
-            os.unlink(audio_list_path)
-        except:
-            pass
+        for path in (clips_list_path, audio_list_path):
+            if path:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
 
 
 def is_segment_completed(segment_name: str) -> bool:
@@ -469,111 +456,210 @@ def mark_segment_completed(segment_name: str):
         f.write(f"{segment_name}\n")
 
 
+def render_videos_display(total_segments, total_built, total_failed, waiting_count,
+                          current_name, state, last_completed, start_time,
+                          waiting_msg="") -> Panel:
+    """Build a Rich Panel showing video build progress."""
+    elapsed = time.time() - start_time
+    elapsed_h = int(elapsed // 3600)
+    elapsed_m = int((elapsed % 3600) // 60)
+    elapsed_s = int(elapsed % 60)
+
+    text = Text()
+
+    # Header
+    text.append("  Step 4: Build Videos", style="bold cyan")
+    text.append(f"                            {elapsed_h:02d}:{elapsed_m:02d}:{elapsed_s:02d}\n",
+                style="dim")
+
+    if waiting_msg:
+        text.append(f"\n  {waiting_msg}\n", style="yellow")
+    else:
+        # Videos progress bar
+        pct = (total_built / total_segments * 100) if total_segments > 0 else 0
+        bar_width = 30
+        filled = int(bar_width * pct / 100)
+        bar = "█" * filled + "░" * (bar_width - filled)
+        text.append(f"\n  Videos: [{bar}] {total_built}/{total_segments}  built\n",
+                    style="white")
+
+        # Current video
+        if current_name:
+            text.append(f"  Current: {current_name}\n", style="cyan")
+
+            ffmpeg_pct = state.get("percent", 0)
+            cur_bar_width = 30
+            cur_filled = int(cur_bar_width * ffmpeg_pct / 100)
+            cur_bar = "█" * cur_filled + "░" * (cur_bar_width - cur_filled)
+            text.append(f"           [{cur_bar}] {ffmpeg_pct:.1f}%\n", style="cyan")
+
+            cur_time = state.get("current_time", 0)
+            tot_dur = state.get("total_duration", 0)
+            eta = state.get("eta", "—")
+
+            def fmt_hms(s):
+                h = int(s // 3600)
+                m = int((s % 3600) // 60)
+                sec = int(s % 60)
+                return f"{h:02d}:{m:02d}:{sec:02d}"
+
+            text.append(f"           {fmt_hms(cur_time)} / {fmt_hms(tot_dur)}  ETA: {eta}\n",
+                        style="dim")
+
+        # Stats
+        text.append(f"\n  Completed: {total_built}    Failed: {total_failed}    Waiting: {waiting_count}\n",
+                    style="white")
+
+        # Last completed
+        if last_completed:
+            text.append(f"  Last: {last_completed}\n", style="dim")
+
+    border = "yellow" if waiting_msg else "cyan"
+    return Panel(text, box=box.DOUBLE, border_style=border)
+
+
 def main():
     """Main entry point."""
-    print("=" * 60)
-    print("Step 4: Build Final Videos")
-    print("=" * 60)
-
-    POLL_INTERVAL = 60  # seconds between polls (segments take a while)
-
     # Check FFmpeg
     if not check_ffmpeg():
-        print("ERROR: FFmpeg not found. Please install FFmpeg.")
+        console.print("[red bold]ERROR: FFmpeg not found. Please install FFmpeg.[/red bold]")
         sys.exit(1)
-    print("FFmpeg: OK")
 
     # Check for audio
     if not CHAPTERS_AUDIO_DIR.exists():
-        print(f"ERROR: Audio directory not found: {CHAPTERS_AUDIO_DIR}")
+        console.print(f"[red bold]ERROR: Audio directory not found: {CHAPTERS_AUDIO_DIR}[/red bold]")
         sys.exit(1)
 
     VIDEOS_DIR.mkdir(exist_ok=True)
     DESCRIPTIONS_DIR.mkdir(exist_ok=True)
 
+    POLL_INTERVAL = 60
     total_built = 0
     total_failed = 0
     start_time = time.time()
+    last_completed = ""
+    errors = []
+
+    # Shared state for FFmpeg progress (read by display, written by ffmpeg thread)
+    ffmpeg_state = {}
 
     try:
-        while True:
-            # Load chapter plans
-            chapters = load_chapter_plans()
-            if not chapters:
-                print(f"\r  Waiting for chapter plans...", end="", flush=True)
-                time.sleep(POLL_INTERVAL)
-                continue
+        with Live(console=console, refresh_per_second=4) as live:
 
-            segments = build_segments(chapters)
-            remaining = [s for s in segments if not is_segment_completed(get_segment_filename(s))]
+            def update_display(current_name="", waiting_msg="", total_segments=0, waiting_count=0):
+                live.update(render_videos_display(
+                    total_segments, total_built, total_failed, waiting_count,
+                    current_name, ffmpeg_state, last_completed, start_time,
+                    waiting_msg))
 
-            if not remaining:
-                if len(chapters) >= 2883:
-                    print("\nAll videos built! Pipeline complete.")
-                    break
-                print(f"\r  All current segments built. Waiting for more chapters... ({len(chapters)} plans)", end="", flush=True)
-                time.sleep(POLL_INTERVAL)
-                continue
+            while True:
+                chapters = load_chapter_plans()
+                if not chapters:
+                    update_display(waiting_msg="Waiting for chapter plans...")
+                    time.sleep(POLL_INTERVAL)
+                    continue
 
-            # Check which segments have all clips ready
-            ready = []
-            for seg in remaining:
-                all_ready = True
-                for ch in seg.chapters:
-                    for scene in ch.scenes:
-                        clip_path = CLIPS_DIR / f"chapter_{ch.index:04d}_scene_{scene['scene_index']:02d}.mp4"
-                        if not clip_path.exists():
-                            all_ready = False
-                            break
-                    if not all_ready:
+                segments = build_segments(chapters)
+                total_segments = len(segments)
+                remaining = [s for s in segments if not is_segment_completed(get_segment_filename(s))]
+
+                if not remaining:
+                    if len(chapters) >= 2883:
+                        update_display(total_segments=total_segments,
+                                       waiting_msg="All videos built! Pipeline complete.")
                         break
-                if all_ready:
-                    ready.append(seg)
+                    update_display(total_segments=total_segments,
+                                   waiting_msg=f"All current segments built. Waiting for more chapters... ({len(chapters)} plans)")
+                    time.sleep(POLL_INTERVAL)
+                    continue
 
-            if not ready:
-                waiting = len(remaining) - len(ready)
-                print(f"\r  {waiting} segments waiting for clips... ({total_built} videos done)", end="", flush=True)
+                # Check which segments have all clips ready
+                ready = []
+                for seg in remaining:
+                    all_ready = True
+                    for ch in seg.chapters:
+                        for scene in ch.scenes:
+                            clip_path = CLIPS_DIR / f"chapter_{ch.index:04d}_scene_{scene['scene_index']:02d}.mp4"
+                            if not clip_path.exists():
+                                all_ready = False
+                                break
+                        if not all_ready:
+                            break
+                    if all_ready:
+                        ready.append(seg)
+
+                if not ready:
+                    update_display(total_segments=total_segments,
+                                   waiting_count=len(remaining),
+                                   waiting_msg=f"{len(remaining)} segments waiting for clips...")
+                    time.sleep(POLL_INTERVAL)
+                    continue
+
+                waiting_count = len(remaining) - len(ready)
+
+                # Build ready segments
+                for seg in ready:
+                    name = get_segment_filename(seg)
+                    output_path = VIDEOS_DIR / f"{name}.mp4"
+                    desc_path = DESCRIPTIONS_DIR / f"{name}.txt"
+
+                    # Reset ffmpeg state for this segment
+                    ffmpeg_state.clear()
+                    ffmpeg_state["percent"] = 0
+                    ffmpeg_state["current_time"] = 0
+                    ffmpeg_state["total_duration"] = seg.total_duration
+                    ffmpeg_state["eta"] = "—"
+
+                    # Start a background thread to refresh the display while FFmpeg runs
+                    stop_refresh = threading.Event()
+
+                    def refresh_loop():
+                        while not stop_refresh.is_set():
+                            update_display(current_name=name,
+                                           total_segments=total_segments,
+                                           waiting_count=waiting_count)
+                            stop_refresh.wait(0.25)
+
+                    refresh_thread = threading.Thread(target=refresh_loop, daemon=True)
+                    refresh_thread.start()
+
+                    try:
+                        success, error_msg = build_segment_video(seg, output_path, ffmpeg_state)
+                    finally:
+                        stop_refresh.set()
+                        refresh_thread.join()
+
+                    if success:
+                        total_built += 1
+                        mark_segment_completed(name)
+
+                        description = generate_description(seg)
+                        with open(desc_path, "w", encoding="utf-8") as f:
+                            f.write(description)
+
+                        size_gb = output_path.stat().st_size / (1024 ** 3)
+                        last_completed = f"{name}  {size_gb:.1f} GB"
+                    else:
+                        total_failed += 1
+                        if output_path.exists():
+                            output_path.unlink()
+                        errors.append(f"{name}: {error_msg}")
+
+                    waiting_count = max(0, waiting_count - 1)
+                    update_display(total_segments=total_segments, waiting_count=waiting_count)
+
                 time.sleep(POLL_INTERVAL)
-                continue
-
-            # Build ready segments
-            for idx, seg in enumerate(ready):
-                name = get_segment_filename(seg)
-                output_path = VIDEOS_DIR / f"{name}.mp4"
-                desc_path = DESCRIPTIONS_DIR / f"{name}.txt"
-
-                duration_h = seg.total_duration / 3600
-                ch_count = len(seg.chapters)
-                print(f"\n[{total_built + 1}] {name}")
-                print(f"  {ch_count} chapters, {duration_h:.1f}h")
-
-                success = build_segment_video(seg, output_path)
-
-                if success:
-                    total_built += 1
-                    mark_segment_completed(name)
-
-                    description = generate_description(seg)
-                    with open(desc_path, "w", encoding="utf-8") as f:
-                        f.write(description)
-
-                    size_gb = output_path.stat().st_size / (1024 ** 3)
-                    print(f"  Output: {size_gb:.1f} GB")
-                else:
-                    total_failed += 1
-                    if output_path.exists():
-                        output_path.unlink()
-                    print(f"  FAILED: {name}")
-
-            print(f"\nBatch done. Polling for ready segments...")
-            time.sleep(POLL_INTERVAL)
 
     except KeyboardInterrupt:
-        print("\n\nStopped by user.")
+        pass
 
+    # Final summary
     total_time = time.time() - start_time
-    print(f"\nStep 4: {total_built} videos ({total_failed} failed) in {total_time/60:.0f}m")
-    print("=" * 60)
+    console.print(f"\nStep 4: {total_built} videos ({total_failed} failed) in {total_time/60:.0f}m")
+    if errors:
+        console.print(f"\n[red]Errors ({len(errors)}):[/red]")
+        for err in errors:
+            console.print(f"  [red]{err}[/red]")
 
 
 if __name__ == "__main__":
