@@ -2,26 +2,30 @@
 
 An AI-powered pipeline for creating illustrated audiobook videos of [Illumine Lingao](https://lingao.entropydrivenmindset.win) (临高启明), a Chinese alternate history web novel about 500 modern people who travel back to 1628 Ming Dynasty China.
 
+**YouTube:** [Volume 1 - Setting Sail](https://www.youtube.com/playlist?list=PLjq2oIRxOOOmKJ54-0L-JCr46zLuNXmFK)
+**Web Reader:** [lingao.entropydrivenmindset.win](https://lingao.entropydrivenmindset.win)
+
 ## Overview
 
 This project generates YouTube-ready audiobook videos with:
 - **AI-narrated audio** (Kokoro TTS)
-- **AI-generated illustrations** (Flux.2 Klein) - chapter title cards in Ming Dynasty ink wash painting style
+- **AI-generated illustrations** (Flux.2 Klein) in Ming Dynasty ink wash painting style
 - **Chapter timestamps** in video descriptions
-- **~58 videos** covering the complete 617-hour, 2,883 chapter translation
+- **Visual consistency** across chapters via an entity registry with deterministic seeds
+- **~58 videos** covering the complete 617-hour, 2,883-scene translation
 
 ## Video Pipeline
 
-The pipeline consists of 5 main steps:
+The pipeline consists of 6 steps, each resumable and runnable independently:
 
 | Step | Script | Description |
 |------|--------|-------------|
 | 0 | `plan_chapters.py` | Whisper transcription + scene mapping |
-| 1 | `generate_prompts.py` | Generate image prompts (Qwen3-4B) |
+| 1 | `generate_prompts.py` | Generate image prompts (Qwen3-4B, local) |
 | 2 | `generate_images.py` | Generate illustrations (Flux.2 Klein) |
-| 3 | `generate_clips.py` | Create video clips from images (FFmpeg) |
-| 4 | `build_videos.py` | Concatenate clips + audio → final MP4s |
-| 5 | `upload_videos.py` | Upload to YouTube (optional) |
+| 3 | `generate_clips.py` | Create video clips from images (FFmpeg, 480x270 @ 5fps) |
+| 4 | `build_videos.py` | Concatenate clips + audio into final MP4s |
+| 5 | `upload_videos.py` | Upload to YouTube with playlist organization |
 
 ### Quick Start
 
@@ -49,20 +53,24 @@ The pipeline consists of 5 main steps:
 ├── build_videos.py             # Step 4: Final video assembly
 ├── upload_videos.py            # Step 5: YouTube upload
 ├── upload_videos_resumable.py  # Resumable upload for unstable connections
+├── update_descriptions.py      # Update YouTube descriptions post-upload
 ├── monitor.py                  # TUI progress monitor
+├── deploy.py                   # Website build & deployment
+├── consistency/                # Character/location entity registry
 ├── website/                    # Web reader (deploy to Cloudflare/Netlify)
 │   ├── index.html
 │   ├── css/
 │   ├── js/
 │   └── content/
-├── .gitignore                  # Excludes generated content & secrets
-└── README.md                   # This file
+├── .gitignore
+└── README.md
 ```
 
 Generated content (not tracked in git):
-- `clips/` - Individual chapter video clips
-- `images/` - AI-generated chapter illustrations
+- `plan/` - Chapter plans with text-to-audio mappings
 - `prompts/` - Generated image prompts (JSON)
+- `images/` - AI-generated chapter illustrations (1024x1024)
+- `clips/` - Individual scene video clips (480x270 @ 5fps)
 - `videos/` - Final YouTube-ready MP4s
 - `descriptions/` - YouTube description files with timestamps
 - `progress/` - Resume tracking files
@@ -86,7 +94,7 @@ pip install transformers torch accelerate bitsandbytes
 pip install diffusers
 pip install ebooklib beautifulsoup4
 pip install openai-whisper
-pip install rich
+pip install rich tqdm
 pip install google-auth-oauthlib google-api-python-client
 ```
 
@@ -104,7 +112,7 @@ To upload videos to YouTube:
 
 ## Web Reader
 
-The `website/` folder contains a web-based EPUB reader that can be deployed to Cloudflare Pages, Netlify, or any static host.
+The `website/` folder contains a web-based reader for the full English translation, deployable to Cloudflare Pages, Netlify, or any static host.
 
 **Live reader:** https://lingao.entropydrivenmindset.win
 
@@ -117,20 +125,15 @@ The AdSense client ID is injected at build time via environment variable (kept o
 copy .env.example .env
 # Edit .env and set ADSENSE_CLIENT_ID=ca-pub-YOUR_ID
 
-# 2. Set the environment variable (Windows)
-set ADSENSE_CLIENT_ID=ca-pub-YOUR_ID
-
-# 3. Build
+# 2. Build
 python deploy.py
 
-# 4. Deploy to Cloudflare
+# 3. Deploy to Cloudflare
 cd dist
 npx wrangler pages deploy .
 ```
 
-Without the `ADSENSE_CLIENT_ID` set, the site will deploy without ads (clean for personal use).
-
-See [website/README.md](website/README.md) for more details.
+Without the `ADSENSE_CLIENT_ID` set, the site deploys without ads.
 
 ## Art Style
 
@@ -138,6 +141,8 @@ Images are generated in Ming Dynasty ink wash painting style (文人画), 1628:
 - Muted earth tones with cobalt and vermillion accents
 - Reference artists: Xiang Shengmo, Zhang Ruitu, Zhang Feng
 - Jingdezhen blue and white porcelain motifs
+
+Character and location consistency is maintained across chapters using an entity registry with deterministic seeds, so the same person looks roughly the same across hundreds of chapters.
 
 ## Novel Information
 
@@ -149,4 +154,4 @@ Images are generated in Ming Dynasty ink wash painting style (文人画), 1628:
 
 ## License
 
-This is a fan project for the Illumine Lingao novel. The web reader and video pipeline code are provided for educational purposes.
+MIT

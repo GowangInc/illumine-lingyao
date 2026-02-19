@@ -18,6 +18,7 @@ import sys
 import time
 import subprocess
 import tempfile
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
@@ -39,8 +40,8 @@ VIDEO_CODEC = "libx264"
 VIDEO_PRESET = "medium"
 VIDEO_CRF = 23
 AUDIO_CODEC = "aac"
-AUDIO_BITRATE = "128k"
-AUDIO_SAMPLE_RATE = 44100
+AUDIO_BITRATE = "64k"  # Speech-only audiobook, 64kbps is excellent
+AUDIO_SAMPLE_RATE = 24000  # Match source audio (24kHz is standard for speech)
 
 # YouTube playlist URL
 PLAYLIST_URL = "https://www.youtube.com/playlist?list=PLjq2oIRxOOOmKJ54-0L-JCr46zLuNXmFK"
@@ -262,6 +263,92 @@ def check_clip_validity(clip_path: Path) -> bool:
         return False
 
 
+def run_ffmpeg_with_progress(cmd: List[str], total_duration: float, timeout: int = 7200) -> Tuple[bool, str]:
+    """
+    Run FFmpeg command and display progress bar based on encoded time.
+
+    Uses -progress pipe:1 for reliable line-buffered progress on all platforms.
+
+    Args:
+        cmd: FFmpeg command as list of strings
+        total_duration: Total expected duration in seconds
+        timeout: Maximum execution time in seconds
+
+    Returns:
+        Tuple of (success: bool, error_message: str)
+    """
+    # Inject -progress pipe:1 to get machine-readable progress on stdout
+    cmd = [cmd[0], "-progress", "pipe:1", "-nostats"] + cmd[1:]
+
+    try:
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
+        )
+
+        start_time = time.time()
+        last_update = 0
+
+        for line in process.stdout:
+            # Check timeout
+            if time.time() - start_time > timeout:
+                process.kill()
+                return False, "FFmpeg timeout"
+
+            line = line.strip()
+            if line.startswith("out_time_ms="):
+                try:
+                    us = int(line.split("=", 1)[1])
+                    current_time = us / 1_000_000
+                except ValueError:
+                    continue
+
+                if current_time < 0 or total_duration <= 0:
+                    continue
+
+                now = time.time()
+                if now - last_update >= 1.0:
+                    percent = min(100, (current_time / total_duration) * 100)
+                    elapsed = now - start_time
+
+                    current_h = int(current_time // 3600)
+                    current_m = int((current_time % 3600) // 60)
+                    current_s = int(current_time % 60)
+
+                    total_h = int(total_duration // 3600)
+                    total_m = int((total_duration % 3600) // 60)
+                    total_s = int(total_duration % 60)
+
+                    if current_time > 0:
+                        eta_seconds = (total_duration - current_time) * (elapsed / current_time)
+                        eta_m = int(eta_seconds // 60)
+                        eta_s = int(eta_seconds % 60)
+                        eta_str = f"{eta_m}m{eta_s}s"
+                    else:
+                        eta_str = "?"
+
+                    bar_width = 30
+                    filled = int(bar_width * percent / 100)
+                    bar = '█' * filled + '░' * (bar_width - filled)
+
+                    print(f"\r    [{bar}] {percent:.1f}% | {current_h:02d}:{current_m:02d}:{current_s:02d} / {total_h:02d}:{total_m:02d}:{total_s:02d} | ETA: {eta_str}   ", end='', flush=True)
+                    last_update = now
+
+        return_code = process.wait()
+        print()  # New line after progress bar
+
+        if return_code != 0:
+            stderr_text = process.stderr.read()
+            return False, f"FFmpeg error (code {return_code}): {stderr_text[-500:]}"
+
+        return True, ""
+
+    except Exception as e:
+        return False, f"FFmpeg exception: {e}"
+
+
 def build_segment_video(segment: Segment, output_path: Path) -> bool:
     """
     Build a single segment video by concatenating clips and audio.
@@ -332,7 +419,7 @@ def build_segment_video(segment: Segment, output_path: Path) -> bool:
             "-map", "0:v", "-map", "1:a",
             "-c:v", "copy",  # Stream copy - no re-encode (clips already H.264)
             "-c:a", AUDIO_CODEC, "-b:a", AUDIO_BITRATE,
-            "-ar", str(AUDIO_SAMPLE_RATE), "-ac", "2",
+            "-ar", str(AUDIO_SAMPLE_RATE), "-ac", "1",  # Mono (source is mono TTS)
             "-movflags", "+faststart",
             "-shortest",
             str(output_path)
@@ -341,13 +428,10 @@ def build_segment_video(segment: Segment, output_path: Path) -> bool:
         print(f"    Running FFmpeg ({len(all_clips)} clips, {len(all_audio_files)} audio files)...")
         # print(f"    Command: {' '.join(cmd)}")  # Debugging
 
-        result = subprocess.run(
-            cmd, capture_output=True, text=True,
-            timeout=7200  # 2 hour timeout
-        )
+        success, error_msg = run_ffmpeg_with_progress(cmd, segment.total_duration, timeout=7200)
 
-        if result.returncode != 0:
-            print(f"    FFmpeg error: {result.stderr[-500:]}")
+        if not success:
+            print(f"    {error_msg}")
             return False
 
         return output_path.exists()
