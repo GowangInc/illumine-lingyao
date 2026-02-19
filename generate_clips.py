@@ -246,9 +246,9 @@ def mark_scene_completed(chapter_index: int, scene_index: int):
 
 
 
-def render_clips_display(total_scenes, batch_total, batch_done, total_processed,
-                         total_failed, active_dict, last_completed, start_time,
-                         waiting=False) -> Panel:
+def render_clips_display(total_scenes, batch_total, batch_done, existing_clips,
+                         total_processed, total_failed, active_dict,
+                         last_completed, start_time, waiting=False) -> Panel:
     """Build a Rich Panel showing clip generation progress."""
     elapsed = time.time() - start_time
     elapsed_h = int(elapsed // 3600)
@@ -263,11 +263,12 @@ def render_clips_display(total_scenes, batch_total, batch_done, total_processed,
                 style="dim")
 
     if waiting:
-        text.append(f"\n  Waiting for images...  ({total_scenes} scenes found, "
-                    f"{total_processed} clips created)\n", style="yellow")
+        total_done = existing_clips + total_processed
+        text.append(f"\n  Waiting for images...  ({total_done}/{total_scenes} clips, "
+                    f"{total_processed} new this run)\n", style="yellow")
     else:
         # Total progress bar
-        overall_done = total_processed + total_failed
+        overall_done = existing_clips + total_processed
         pct = (overall_done / total_scenes * 100) if total_scenes > 0 else 0
         bar_width = 30
         filled = int(bar_width * pct / 100)
@@ -320,6 +321,7 @@ def main():
     validate_existing_clips()
 
     POLL_INTERVAL = 10
+    existing_clips = len(list(CLIPS_DIR.glob("*.mp4")))
     total_processed = 0
     total_failed = 0
     start_time = time.time()
@@ -347,14 +349,15 @@ def main():
                 if not remaining:
                     if total_processed > 0 and total_scenes >= 2883:
                         live.update(render_clips_display(
-                            total_scenes, 0, 0, total_processed, total_failed,
-                            active_dict, last_completed, start_time))
+                            total_scenes, 0, 0, existing_clips, total_processed,
+                            total_failed, active_dict, last_completed, start_time))
                         break
 
                     # Show waiting state
                     live.update(render_clips_display(
-                        total_scenes, 0, 0, total_processed, total_failed,
-                        active_dict, last_completed, start_time, waiting=True))
+                        total_scenes, 0, 0, existing_clips, total_processed,
+                        total_failed, active_dict, last_completed, start_time,
+                        waiting=True))
                     time.sleep(POLL_INTERVAL)
                     continue
 
@@ -402,8 +405,9 @@ def main():
                             batch_done += 1
 
                         live.update(render_clips_display(
-                            total_scenes, batch_total, batch_done, total_processed,
-                            total_failed, active_dict, last_completed, start_time))
+                            total_scenes, batch_total, batch_done, existing_clips,
+                            total_processed, total_failed, active_dict,
+                            last_completed, start_time))
                 finally:
                     executor.shutdown(wait=False, cancel_futures=True)
 
