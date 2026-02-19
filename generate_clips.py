@@ -17,6 +17,7 @@ import json
 import sys
 import time
 import subprocess
+import threading
 from pathlib import Path
 from typing import Dict, List, Tuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -440,30 +441,44 @@ def main():
                 batch_total = len(clip_args)
                 batch_done = 0
 
-                with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
-                    futures = {executor.submit(generate_static_clip, args): args for args in clip_args}
+                # Background thread to refresh display while FFmpeg encodes
+                stop_refresh = threading.Event()
 
-                    for future in as_completed(futures):
-                        ch, sc, success, error_msg = future.result()
-
-                        if success:
-                            total_processed += 1
-                            last_completed = f"chapter_{ch:04d}_scene_{sc:02d}.mp4"
-                            mark_scene_completed(ch, sc)
-                        else:
-                            total_failed += 1
-                            clip_path = CLIPS_DIR / f"chapter_{ch:04d}_scene_{sc:02d}.mp4"
-                            if clip_path.exists():
-                                try:
-                                    clip_path.unlink()
-                                except OSError:
-                                    pass
-                            errors.append(f"Ch {ch:04d} Sc {sc:02d}: {error_msg}")
-
-                        batch_done += 1
+                def refresh_loop():
+                    while not stop_refresh.is_set():
                         live.update(render_clips_display(
                             total_scenes, batch_total, batch_done, total_processed,
                             total_failed, active_dict, last_completed, start_time))
+                        stop_refresh.wait(0.25)
+
+                refresh_thread = threading.Thread(target=refresh_loop, daemon=True)
+                refresh_thread.start()
+
+                try:
+                    with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                        futures = {executor.submit(generate_static_clip, args): args for args in clip_args}
+
+                        for future in as_completed(futures):
+                            ch, sc, success, error_msg = future.result()
+
+                            if success:
+                                total_processed += 1
+                                last_completed = f"chapter_{ch:04d}_scene_{sc:02d}.mp4"
+                                mark_scene_completed(ch, sc)
+                            else:
+                                total_failed += 1
+                                clip_path = CLIPS_DIR / f"chapter_{ch:04d}_scene_{sc:02d}.mp4"
+                                if clip_path.exists():
+                                    try:
+                                        clip_path.unlink()
+                                    except OSError:
+                                        pass
+                                errors.append(f"Ch {ch:04d} Sc {sc:02d}: {error_msg}")
+
+                            batch_done += 1
+                finally:
+                    stop_refresh.set()
+                    refresh_thread.join()
 
                 time.sleep(POLL_INTERVAL)
 

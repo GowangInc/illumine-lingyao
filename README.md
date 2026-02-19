@@ -94,7 +94,7 @@ pip install transformers torch accelerate bitsandbytes
 pip install diffusers
 pip install ebooklib beautifulsoup4
 pip install openai-whisper
-pip install rich tqdm
+pip install rich
 pip install google-auth-oauthlib google-api-python-client
 ```
 
