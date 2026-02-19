@@ -17,10 +17,9 @@ import json
 import sys
 import time
 import subprocess
-import threading
 from pathlib import Path
-from typing import Dict, List, Tuple
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from typing import Dict, List
+from concurrent.futures import ProcessPoolExecutor, wait, FIRST_COMPLETED
 import multiprocessing
 
 from rich.console import Console
@@ -127,103 +126,33 @@ def validate_existing_clips():
         console.print("All existing clips verified successfully.")
 
 
-def run_ffmpeg_with_progress(cmd: List[str], duration: float, task_id: str, active_dict: dict, timeout: int = 300) -> Tuple[bool, str]:
-    """
-    Run FFmpeg command and track progress via shared dict for monitor thread.
-
-    Uses -progress pipe:1 for reliable line-buffered progress on all platforms.
-
-    Args:
-        cmd: FFmpeg command as list of strings
-        duration: Expected clip duration in seconds
-        task_id: Task identifier for display
-        active_dict: Shared dict to store progress percentage
-        timeout: Maximum execution time in seconds
-
-    Returns:
-        Tuple of (success: bool, error_message: str)
-    """
-    # Inject -progress pipe:1 to get machine-readable progress on stdout
-    # Insert after "ffmpeg" and before other args
-    cmd = [cmd[0], "-progress", "pipe:1", "-nostats"] + cmd[1:]
-
-    try:
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            universal_newlines=True,
-        )
-
-        # -progress outputs lines like: out_time_ms=5100000
-        start_time = time.time()
-
-        # Use readline() instead of iterating - avoids Python's internal buffering
-        while True:
-            if time.time() - start_time > timeout:
-                process.kill()
-                return False, "FFmpeg timeout"
-
-            line = process.stdout.readline()
-            if not line:
-                break
-
-            line = line.strip()
-            if line.startswith("out_time_ms="):
-                try:
-                    us = int(line.split("=", 1)[1])
-                    current_time = us / 1_000_000
-                    if current_time >= 0 and duration > 0:
-                        percent = min(100, (current_time / duration) * 100)
-                        if active_dict is not None:
-                            active_dict[task_id] = percent
-                except (ValueError, ZeroDivisionError):
-                    pass
-
-        return_code = process.wait()
-
-        if return_code != 0:
-            stderr_text = process.stderr.read()
-            return False, f"FFmpeg error: {stderr_text[-200:]}"
-
-        return True, ""
-
-    except Exception as e:
-        return False, f"FFmpeg exception: {e}"
-
-
 def generate_static_clip(args: tuple) -> tuple:
     """
     Generate a static clip from an image (no zoom/motion).
     Scales image to output resolution and loops for the given duration.
-    
+
     Args:
         args: Tuple of (chapter_index, scene_index, image_path_str, output_path_str, duration, active_dict)
-    
+
     Returns:
         Tuple of (chapter_index, scene_index, success: bool, error_msg: str)
     """
     ch, sc, image_path_str, output_path_str, duration, active_dict = args
     image_path = Path(image_path_str)
     output_path = Path(output_path_str)
-    
+
     # Use a temp file to ensure atomic write (prevents partial files on interrupt)
     temp_path = output_path.with_suffix(".tmp.mp4")
-    
-    # Register as active (0 = starting, will be updated with percent by FFmpeg progress)
+
+    # Register as active
     task_id = f"Ch{ch:04d}:Sc{sc:02d}"
     if active_dict is not None:
-        active_dict[task_id] = 0
+        active_dict[task_id] = time.time()
 
     try:
-        # Use faster encoding settings:
-        # - preset veryfast: Much faster encoding, ~5-10% larger file size
-        # - tune stillimage: Optimizes for static image content
-        # - frame lookahead optimizations for static content
         cmd = [
             "ffmpeg", "-y",
-            "-hide_banner", "-loglevel", "info",  # Need info level to get progress stats
-            "-stats",  # Enable progress statistics
+            "-hide_banner", "-loglevel", "error",
             "-loop", "1",
             "-i", str(image_path),
             "-vf", f"scale={OUTPUT_WIDTH}:{OUTPUT_HEIGHT}:force_original_aspect_ratio=decrease,pad={OUTPUT_WIDTH}:{OUTPUT_HEIGHT}:(ow-iw)/2:(oh-ih)/2",
@@ -237,17 +166,19 @@ def generate_static_clip(args: tuple) -> tuple:
             str(temp_path)
         ]
 
-        success, error_msg = run_ffmpeg_with_progress(
-            cmd, duration, task_id, active_dict, timeout=max(300, duration * 2)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True,
+            timeout=max(300, duration * 2)
         )
 
-        if not success:
+        if result.returncode != 0:
             if temp_path.exists():
                 try:
                     temp_path.unlink()
                 except OSError:
                     pass
-            return (ch, sc, False, error_msg)
+            error_msg = result.stderr[-200:] if result.stderr else "Unknown error"
+            return (ch, sc, False, f"FFmpeg error: {error_msg}")
 
         if not temp_path.exists():
             return (ch, sc, False, "Output file not created")
@@ -256,6 +187,13 @@ def generate_static_clip(args: tuple) -> tuple:
         temp_path.replace(output_path)
 
         return (ch, sc, True, "")
+    except subprocess.TimeoutExpired:
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
+        return (ch, sc, False, f"FFmpeg timeout ({duration:.0f}s clip)")
     except Exception as e:
         if temp_path.exists():
             try:
@@ -337,7 +275,7 @@ def render_clips_display(total_scenes, batch_total, batch_done, total_processed,
         text.append(f"\n  Total:   [{bar}] {overall_done}/{total_scenes}  {pct:.1f}%\n",
                     style="white")
 
-        # Current clip progress (from active_dict)
+        # Current clip (from active_dict — stores start time)
         try:
             keys = sorted(active_dict.keys())
         except Exception:
@@ -346,16 +284,11 @@ def render_clips_display(total_scenes, batch_total, batch_done, total_processed,
         if keys:
             task_id = keys[0]
             try:
-                clip_pct = active_dict[task_id]
-                if not isinstance(clip_pct, (int, float)) or isinstance(clip_pct, bool):
-                    clip_pct = 0
-            except (KeyError, ValueError):
-                clip_pct = 0
-            clip_bar_width = 20
-            clip_filled = int(clip_bar_width * clip_pct / 100)
-            clip_bar = "█" * clip_filled + "░" * (clip_bar_width - clip_filled)
-            text.append(f"  Current: {task_id}  [{clip_bar}] {clip_pct:.0f}%\n",
-                        style="cyan")
+                start = active_dict[task_id]
+                clip_elapsed = int(time.time() - start)
+                text.append(f"  Current: {task_id}  ({clip_elapsed}s)\n", style="cyan")
+            except (KeyError, ValueError, TypeError):
+                text.append(f"  Current: {task_id}\n", style="cyan")
         else:
             text.append(f"  Current: —\n", style="dim")
 
@@ -397,8 +330,8 @@ def main():
     manager = multiprocessing.Manager()
     active_dict = manager.dict()
 
-    try:
-        with Live(console=console, refresh_per_second=4) as live:
+    with Live(console=console, refresh_per_second=4) as live:
+        try:
             while True:
                 all_scenes = get_all_scenes()
                 total_scenes = len(all_scenes)
@@ -441,24 +374,15 @@ def main():
                 batch_total = len(clip_args)
                 batch_done = 0
 
-                # Background thread to refresh display while FFmpeg encodes
-                stop_refresh = threading.Event()
-
-                def refresh_loop():
-                    while not stop_refresh.is_set():
-                        live.update(render_clips_display(
-                            total_scenes, batch_total, batch_done, total_processed,
-                            total_failed, active_dict, last_completed, start_time))
-                        stop_refresh.wait(0.25)
-
-                refresh_thread = threading.Thread(target=refresh_loop, daemon=True)
-                refresh_thread.start()
-
+                executor = ProcessPoolExecutor(max_workers=MAX_WORKERS)
                 try:
-                    with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
-                        futures = {executor.submit(generate_static_clip, args): args for args in clip_args}
+                    futures = {executor.submit(generate_static_clip, args): args for args in clip_args}
+                    pending = set(futures.keys())
 
-                        for future in as_completed(futures):
+                    while pending:
+                        done, pending = wait(pending, timeout=0.5, return_when=FIRST_COMPLETED)
+
+                        for future in done:
                             ch, sc, success, error_msg = future.result()
 
                             if success:
@@ -476,14 +400,17 @@ def main():
                                 errors.append(f"Ch {ch:04d} Sc {sc:02d}: {error_msg}")
 
                             batch_done += 1
+
+                        live.update(render_clips_display(
+                            total_scenes, batch_total, batch_done, total_processed,
+                            total_failed, active_dict, last_completed, start_time))
                 finally:
-                    stop_refresh.set()
-                    refresh_thread.join()
+                    executor.shutdown(wait=False, cancel_futures=True)
 
                 time.sleep(POLL_INTERVAL)
 
-    except KeyboardInterrupt:
-        pass
+        except KeyboardInterrupt:
+            pass
 
     # Final summary
     total_time = time.time() - start_time

@@ -543,15 +543,15 @@ def main():
     # Shared state for FFmpeg progress (read by display, written by ffmpeg thread)
     ffmpeg_state = {}
 
-    try:
-        with Live(console=console, refresh_per_second=4) as live:
+    with Live(console=console, refresh_per_second=4) as live:
 
-            def update_display(current_name="", waiting_msg="", total_segments=0, waiting_count=0):
-                live.update(render_videos_display(
-                    total_segments, total_built, total_failed, waiting_count,
-                    current_name, ffmpeg_state, last_completed, start_time,
-                    waiting_msg))
+        def update_display(current_name="", waiting_msg="", total_segments=0, waiting_count=0):
+            live.update(render_videos_display(
+                total_segments, total_built, total_failed, waiting_count,
+                current_name, ffmpeg_state, last_completed, start_time,
+                waiting_msg))
 
+        try:
             while True:
                 chapters = load_chapter_plans()
                 if not chapters:
@@ -650,8 +650,8 @@ def main():
 
                 time.sleep(POLL_INTERVAL)
 
-    except KeyboardInterrupt:
-        pass
+        except KeyboardInterrupt:
+            pass
 
     # Final summary
     total_time = time.time() - start_time
