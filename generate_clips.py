@@ -19,7 +19,6 @@ import time
 import subprocess
 from pathlib import Path
 from typing import Dict, List
-from concurrent.futures import ProcessPoolExecutor, wait, FIRST_COMPLETED
 import multiprocessing
 
 from rich.console import Console
@@ -361,8 +360,12 @@ def main():
                     time.sleep(POLL_INTERVAL)
                     continue
 
-                # Prepare arguments for parallel processing
-                clip_args = []
+                # Process clips sequentially
+                # With MAX_WORKERS=1, we process one at a time to minimize memory usage
+                # Each clip is ~10 min of video, so process continuously without batching overhead
+                batch_total = len(remaining)
+                batch_done = 0
+                
                 for scene_data in remaining:
                     ch = scene_data["chapter_index"]
                     sc = scene_data["scene_index"]
@@ -372,44 +375,30 @@ def main():
 
                     image_path = IMAGES_DIR / f"chapter_{ch:04d}_scene_{sc:02d}.png"
                     clip_path = CLIPS_DIR / f"chapter_{ch:04d}_scene_{sc:02d}.mp4"
-                    clip_args.append((ch, sc, str(image_path), str(clip_path), duration, active_dict))
-
-                batch_total = len(clip_args)
-                batch_done = 0
-
-                executor = ProcessPoolExecutor(max_workers=MAX_WORKERS)
-                try:
-                    futures = {executor.submit(generate_static_clip, args): args for args in clip_args}
-                    pending = set(futures.keys())
-
-                    while pending:
-                        done, pending = wait(pending, timeout=0.5, return_when=FIRST_COMPLETED)
-
-                        for future in done:
-                            ch, sc, success, error_msg = future.result()
-
-                            if success:
-                                total_processed += 1
-                                last_completed = f"chapter_{ch:04d}_scene_{sc:02d}.mp4"
-                                mark_scene_completed(ch, sc)
-                            else:
-                                total_failed += 1
-                                clip_path = CLIPS_DIR / f"chapter_{ch:04d}_scene_{sc:02d}.mp4"
-                                if clip_path.exists():
-                                    try:
-                                        clip_path.unlink()
-                                    except OSError:
-                                        pass
-                                errors.append(f"Ch {ch:04d} Sc {sc:02d}: {error_msg}")
-
-                            batch_done += 1
-
-                        live.update(render_clips_display(
-                            total_scenes, batch_total, batch_done, existing_clips,
-                            total_processed, total_failed, active_dict,
-                            last_completed, start_time))
-                finally:
-                    executor.shutdown(wait=False, cancel_futures=True)
+                    
+                    args = (ch, sc, str(image_path), str(clip_path), duration, active_dict)
+                    ch, sc, success, error_msg = generate_static_clip(args)
+                    
+                    if success:
+                        total_processed += 1
+                        last_completed = f"chapter_{ch:04d}_scene_{sc:02d}.mp4"
+                        mark_scene_completed(ch, sc)
+                    else:
+                        total_failed += 1
+                        if clip_path.exists():
+                            try:
+                                clip_path.unlink()
+                            except OSError:
+                                pass
+                        errors.append(f"Ch {ch:04d} Sc {sc:02d}: {error_msg}")
+                    
+                    batch_done += 1
+                    
+                    # Update display every clip (since each takes significant time)
+                    live.update(render_clips_display(
+                        total_scenes, batch_total, batch_done, existing_clips,
+                        total_processed, total_failed, active_dict,
+                        last_completed, start_time))
 
                 time.sleep(POLL_INTERVAL)
 

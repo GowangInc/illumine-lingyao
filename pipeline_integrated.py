@@ -128,11 +128,37 @@ class Segment:
 
 
 class ClipValidator:
-    """Comprehensive clip validation using ffprobe."""
+    """Comprehensive clip validation using ffprobe with bounded memory usage."""
+    
+    # Cache settings to prevent unbounded memory growth
+    MAX_CACHE_SIZE = 500  # Maximum number of entries to keep in cache
+    CACHE_TTL_SECONDS = 300  # Time-to-live for cache entries (5 minutes)
+    CLEANUP_INTERVAL = 100  # Clean up old entries every N validations
     
     def __init__(self):
         self.cache: Dict[Path, Dict] = {}
         self.failed: Set[Path] = set()
+        self._validation_count = 0  # Counter for periodic cleanup
+    
+    def _cleanup_cache(self):
+        """Remove expired cache entries to prevent memory growth."""
+        now = time.time()
+        expired = [
+            path for path, data in self.cache.items()
+            if now - data.get("time", 0) > self.CACHE_TTL_SECONDS
+        ]
+        for path in expired:
+            del self.cache[path]
+        
+        # If still too large, remove oldest entries
+        if len(self.cache) > self.MAX_CACHE_SIZE:
+            sorted_items = sorted(
+                self.cache.items(),
+                key=lambda x: x[1].get("time", 0)
+            )
+            to_remove = len(self.cache) - self.MAX_CACHE_SIZE
+            for path, _ in sorted_items[:to_remove]:
+                del self.cache[path]
     
     def validate(self, clip_path: Path, expected_duration: Optional[float] = None) -> Tuple[bool, str]:
         """Thoroughly validate a clip file."""
@@ -141,6 +167,16 @@ class ClipValidator:
         
         if clip_path in self.failed:
             return False, "Previously marked as failing"
+        
+        # Check cache first with TTL
+        if clip_path in self.cache:
+            cached = self.cache[clip_path]
+            if time.time() - cached.get("time", 0) < self.CACHE_TTL_SECONDS:
+                # Update access time to keep recently used items in cache
+                cached["time"] = time.time()
+                return True, f"OK (cached, {cached.get('duration', 0):.1f}s)"
+            # Expired, remove from cache
+            del self.cache[clip_path]
         
         # Check file size
         size = clip_path.stat().st_size
@@ -189,6 +225,11 @@ class ClipValidator:
                     return False, f"Too short: {duration:.1f}s < {min_dur:.1f}s expected"
                 if duration > max_dur:
                     return False, f"Too long: {duration:.1f}s > {max_dur:.1f}s expected"
+            
+            # Update cache with TTL management
+            self._validation_count += 1
+            if self._validation_count % self.CLEANUP_INTERVAL == 0:
+                self._cleanup_cache()
             
             self.cache[clip_path] = {"duration": duration, "time": time.time()}
             return True, f"OK ({duration:.1f}s)"
