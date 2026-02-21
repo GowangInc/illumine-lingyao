@@ -361,6 +361,7 @@ def run_ffmpeg_with_progress(cmd: List[str], total_duration: float, state: dict,
         return False, f"FFmpeg exception: {e}"
 
 
+
 def build_segment_video(segment: Segment, output_path: Path, state: dict) -> Tuple[bool, str]:
     """
     Build a single segment video by concatenating clips and audio.
@@ -405,7 +406,8 @@ def build_segment_video(segment: Segment, output_path: Path, state: dict) -> Tup
     audio_list_path = None
     try:
         with tempfile.NamedTemporaryFile(
-            mode='w', suffix='.txt', delete=False, prefix='clips_'
+            mode='w', suffix='.txt', delete=False, prefix='clips_',
+            encoding='utf-8'
         ) as clips_list:
             for clip in all_clips:
                 abs_path = str(clip.resolve()).replace(chr(92), '/')
@@ -413,7 +415,8 @@ def build_segment_video(segment: Segment, output_path: Path, state: dict) -> Tup
             clips_list_path = clips_list.name
 
         with tempfile.NamedTemporaryFile(
-            mode='w', suffix='.txt', delete=False, prefix='audio_'
+            mode='w', suffix='.txt', delete=False, prefix='audio_',
+            encoding='utf-8'
         ) as audio_list:
             for audio_path, _ in all_audio_files:
                 abs_path = str(audio_path.resolve()).replace(chr(92), '/')
@@ -655,6 +658,7 @@ def main():
     start_time = time.time()
     last_completed = ""
     errors = []
+    failed_segments = set()  # Don't retry segments that already failed
 
     # Shared state for FFmpeg progress (read by display, written by ffmpeg thread)
     ffmpeg_state = {}
@@ -677,7 +681,9 @@ def main():
 
                 segments = build_segments(chapters)
                 total_segments = len(segments)
-                remaining = [s for s in segments if not is_segment_completed(get_segment_filename(s))]
+                remaining = [s for s in segments
+                            if not is_segment_completed(get_segment_filename(s))
+                            and get_segment_filename(s) not in failed_segments]
 
                 if not remaining:
                     if len(chapters) >= 2883:
@@ -757,6 +763,7 @@ def main():
                         last_completed = f"{name}  {size_gb:.1f} GB"
                     else:
                         total_failed += 1
+                        failed_segments.add(name)
                         if output_path.exists():
                             output_path.unlink()
                         errors.append(f"{name}: {error_msg}")
