@@ -557,9 +557,12 @@ def mark_segment_completed(segment_name: str):
         f.write(f"{segment_name}\n")
 
 
+MAX_DISPLAY_ERRORS = 5  # Show last N errors in the TUI
+
+
 def render_videos_display(total_segments, total_built, total_failed, waiting_count,
                           current_name, state, last_completed, start_time,
-                          waiting_msg="") -> Panel:
+                          waiting_msg="", errors=None) -> Panel:
     """Build a Rich Panel showing video build progress."""
     elapsed = time.time() - start_time
     elapsed_h = int(elapsed // 3600)
@@ -580,7 +583,7 @@ def render_videos_display(total_segments, total_built, total_failed, waiting_cou
         pct = (total_built / total_segments * 100) if total_segments > 0 else 0
         bar_width = 30
         filled = int(bar_width * pct / 100)
-        bar = "█" * filled + "░" * (bar_width - filled)
+        bar = "\u2588" * filled + "\u2591" * (bar_width - filled)
         text.append(f"\n  Videos: [{bar}] {total_built}/{total_segments}  built\n",
                     style="white")
 
@@ -591,7 +594,7 @@ def render_videos_display(total_segments, total_built, total_failed, waiting_cou
             ffmpeg_pct = state.get("percent", 0)
             cur_bar_width = 30
             cur_filled = int(cur_bar_width * ffmpeg_pct / 100)
-            cur_bar = "█" * cur_filled + "░" * (cur_bar_width - cur_filled)
+            cur_bar = "\u2588" * cur_filled + "\u2591" * (cur_bar_width - cur_filled)
             text.append(f"           [{cur_bar}] {ffmpeg_pct:.1f}%\n", style="cyan")
 
             cur_time = state.get("current_time", 0)
@@ -615,7 +618,16 @@ def render_videos_display(total_segments, total_built, total_failed, waiting_cou
         if last_completed:
             text.append(f"  Last: {last_completed}\n", style="dim")
 
-    border = "yellow" if waiting_msg else "cyan"
+    # Error log
+    if errors:
+        text.append(f"\n  Errors ({len(errors)}):\n", style="red bold")
+        shown = errors[-MAX_DISPLAY_ERRORS:]
+        if len(errors) > MAX_DISPLAY_ERRORS:
+            text.append(f"  ... {len(errors) - MAX_DISPLAY_ERRORS} earlier errors hidden\n", style="dim red")
+        for err in shown:
+            text.append(f"  {err}\n", style="red")
+
+    border = "red" if errors else ("yellow" if waiting_msg else "cyan")
     return Panel(text, box=box.DOUBLE, border_style=border)
 
 
@@ -653,7 +665,7 @@ def main():
             live.update(render_videos_display(
                 total_segments, total_built, total_failed, waiting_count,
                 current_name, ffmpeg_state, last_completed, start_time,
-                waiting_msg))
+                waiting_msg, errors))
 
         try:
             while True:
