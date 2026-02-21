@@ -455,14 +455,43 @@ def build_segment_video(segment: Segment, output_path: Path, state: dict) -> Tup
                     pass
 
 
+def get_video_duration(video_path: Path) -> float:
+    """Get duration of a video file in seconds via ffprobe. Returns -1 on error."""
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(video_path)],
+            capture_output=True, text=True, timeout=30
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return -1
+        return float(result.stdout.strip())
+    except Exception:
+        return -1
+
+
 def validate_existing_videos():
-    """Check all existing videos for corruption and delete bad ones."""
+    """Check all existing videos for corruption or truncation and delete bad ones.
+
+    Checks both file validity (ffprobe can read it) and duration (at least 90%
+    of expected segment duration). Truncated videos from killed builds are
+    detected and removed so they get rebuilt.
+    """
     if not VIDEOS_DIR.exists():
         return
 
     videos = list(VIDEOS_DIR.glob("*.mp4"))
     if not videos:
         return
+
+    # Build expected duration map from segment data
+    expected_durations = {}
+    chapters = load_chapter_plans()
+    if chapters:
+        segments = build_segments(chapters)
+        for seg in segments:
+            name = get_segment_filename(seg)
+            expected_durations[name] = seg.total_duration
 
     total = len(videos)
     bad_count = 0
@@ -473,17 +502,32 @@ def validate_existing_videos():
             pct = (i + 1) / total * 100
             bar_width = 40
             filled = int(bar_width * pct / 100)
-            bar = "█" * filled + "░" * (bar_width - filled)
+            bar = "\u2588" * filled + "\u2591" * (bar_width - filled)
 
             text = Text()
             text.append("Verifying Videos\n\n", style="bold cyan")
             text.append(f"  [{bar}] {i + 1}/{total}  {pct:.0f}%\n", style="cyan")
             if errors:
-                text.append(f"\n  Corrupt: {bad_count}", style="red")
+                text.append(f"\n  Bad: {bad_count}", style="red")
+                text.append(f"  {errors[-1]}\n", style="dim red")
             live.update(Panel(text, box=box.DOUBLE, border_style="cyan"))
 
-            if not check_clip_validity(video):
-                errors.append(video.name)
+            reason = None
+            actual_dur = get_video_duration(video)
+
+            if actual_dur < 0:
+                reason = "corrupt (ffprobe failed)"
+            else:
+                # Check against expected duration
+                name = video.stem
+                expected = expected_durations.get(name)
+                if expected and actual_dur < expected * 0.9:
+                    actual_h = actual_dur / 3600
+                    expected_h = expected / 3600
+                    reason = f"truncated ({actual_h:.1f}h / {expected_h:.1f}h expected)"
+
+            if reason:
+                errors.append(f"{video.name}: {reason}")
                 try:
                     video.unlink()
                     bad_count += 1
@@ -491,7 +535,9 @@ def validate_existing_videos():
                     pass
 
     if bad_count > 0:
-        console.print(f"Deleted {bad_count} corrupt videos. They will be rebuilt.")
+        console.print(f"Deleted {bad_count} corrupt/truncated videos. They will be rebuilt.")
+        for err in errors:
+            console.print(f"  {err}")
     else:
         console.print("All existing videos verified successfully.")
 
