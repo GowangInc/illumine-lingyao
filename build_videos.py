@@ -455,6 +455,47 @@ def build_segment_video(segment: Segment, output_path: Path, state: dict) -> Tup
                     pass
 
 
+def validate_existing_videos():
+    """Check all existing videos for corruption and delete bad ones."""
+    if not VIDEOS_DIR.exists():
+        return
+
+    videos = list(VIDEOS_DIR.glob("*.mp4"))
+    if not videos:
+        return
+
+    total = len(videos)
+    bad_count = 0
+    errors = []
+
+    with Live(console=console, refresh_per_second=4) as live:
+        for i, video in enumerate(videos):
+            pct = (i + 1) / total * 100
+            bar_width = 40
+            filled = int(bar_width * pct / 100)
+            bar = "█" * filled + "░" * (bar_width - filled)
+
+            text = Text()
+            text.append("Verifying Videos\n\n", style="bold cyan")
+            text.append(f"  [{bar}] {i + 1}/{total}  {pct:.0f}%\n", style="cyan")
+            if errors:
+                text.append(f"\n  Corrupt: {bad_count}", style="red")
+            live.update(Panel(text, box=box.DOUBLE, border_style="cyan"))
+
+            if not check_clip_validity(video):
+                errors.append(video.name)
+                try:
+                    video.unlink()
+                    bad_count += 1
+                except OSError:
+                    pass
+
+    if bad_count > 0:
+        console.print(f"Deleted {bad_count} corrupt videos. They will be rebuilt.")
+    else:
+        console.print("All existing videos verified successfully.")
+
+
 def is_segment_completed(segment_name: str) -> bool:
     """Check if segment video already exists."""
     video_path = VIDEOS_DIR / f"{segment_name}.mp4"
@@ -546,6 +587,9 @@ def main():
 
     VIDEOS_DIR.mkdir(exist_ok=True)
     DESCRIPTIONS_DIR.mkdir(exist_ok=True)
+
+    # Verify existing videos on startup to catch any corruption from killed runs
+    validate_existing_videos()
 
     POLL_INTERVAL = 60
     total_built = 0
