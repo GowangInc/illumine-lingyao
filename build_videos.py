@@ -297,6 +297,19 @@ def run_ffmpeg_with_progress(cmd: List[str], total_duration: float, state: dict,
             universal_newlines=True,
         )
 
+        # Drain stderr in a background thread to prevent pipe buffer deadlock.
+        # Without this, ffmpeg blocks once the OS pipe buffer (~4-8KB) fills with
+        # warnings (e.g. timestamp discontinuities at clip boundaries), which stalls
+        # stdout progress output and causes the build to grind to a halt.
+        stderr_lines = []
+
+        def drain_stderr():
+            for line in process.stderr:
+                stderr_lines.append(line)
+
+        stderr_thread = threading.Thread(target=drain_stderr, daemon=True)
+        stderr_thread.start()
+
         ffmpeg_start = time.time()
 
         while True:
@@ -336,9 +349,10 @@ def run_ffmpeg_with_progress(cmd: List[str], total_duration: float, state: dict,
                 state["eta"] = eta_str
 
         return_code = process.wait()
+        stderr_thread.join(timeout=5)
 
         if return_code != 0:
-            stderr_text = process.stderr.read()
+            stderr_text = "".join(stderr_lines)
             return False, f"FFmpeg error (code {return_code}): {stderr_text[-500:]}"
 
         return True, ""
